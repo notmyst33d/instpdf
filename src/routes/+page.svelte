@@ -1,22 +1,7 @@
 <script lang="ts">
-    let files: any = $state([]);
-    let currentIndex = $state(-1);
-    let hoverIndex = $state(-1);
+    import { dragHandle, dragHandleZone } from "svelte-dnd-action";
+    let items: any = $state([]);
     let processing = $state(false);
-
-    $effect(() => {
-        if (
-            currentIndex === hoverIndex ||
-            currentIndex === -1 ||
-            hoverIndex === -1
-        )
-            return;
-        [files[currentIndex], files[hoverIndex]] = [
-            files[hoverIndex],
-            files[currentIndex],
-        ];
-        currentIndex = hoverIndex;
-    });
 </script>
 
 <h1>InstPDF</h1>
@@ -27,7 +12,7 @@
         processing = true;
         const form = new FormData();
         const documents: any[] = [];
-        files.forEach((file: any, i: number) => {
+        items.forEach((file: any, i: number) => {
             form.append(`file${i}`, file.file);
             let filter: any = {
                 type: "nofilter",
@@ -52,38 +37,27 @@
             body: form,
         });
         if (response.status === 200) {
-            const blobUrl = URL.createObjectURL(await response.blob());
-            window.open(blobUrl, "_blank");
-            URL.revokeObjectURL(blobUrl);
+            const url = URL.createObjectURL(await response.blob());
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute("download", "out.pdf");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         } else {
             alert("Неизвестная ошибка");
         }
         processing = false;
     }}
 >
-    <div>
-        {#each files as file, i}
-            <div
-                class="file-entry row"
-                draggable="true"
-                ondragstart={(e) => {
-                    if (!file.handleElement.contains(file.clickTarget)) {
-                        e.preventDefault();
-                        return;
-                    }
-                    currentIndex = i;
-                }}
-                ondragend={() => {
-                    currentIndex = -1;
-                    hoverIndex = -1;
-                    file.clickTarget = undefined;
-                }}
-                ondragenter={() => (hoverIndex = i)}
-            >
-                <div
-                    class="file-entry-body column surface-container"
-                    style:opacity={currentIndex == i ? 0.25 : 1}
-                >
+    <section
+        use:dragHandleZone={{ items }}
+        onconsider={(e) => (items = e.detail.items)}
+        onfinalize={(e) => (items = e.detail.items)}
+    >
+        {#each items as file (file.id)}
+            <div class="file-entry row">
+                <div class="file-entry-body column surface-container">
                     <div
                         class="row"
                         style:align-items="center"
@@ -93,7 +67,7 @@
                             style:font-weight="700"
                             style:overflow="hidden"
                             style:text-overflow="ellipsis"
-                            >{file.file.name}</span
+                            style:white-space="nowrap">{file.file.name}</span
                         >
                         {#if file.file.type === "application/pdf"}
                             <select
@@ -110,9 +84,7 @@
                             class="icon-button"
                             value="⨉"
                             onclick={() =>
-                                (files = files.filter(
-                                    (_: any, j: number) => i != j,
-                                ))}
+                                (items = items.filter((f: any) => file !== f))}
                         />
                     </div>
                     {#if file.filterType === "frompage"}
@@ -135,24 +107,21 @@
                         <div>
                             <input
                                 type="checkbox"
-                                id="enhance"
+                                bind:this={file.enhanceElement}
                                 bind:checked={file.enhance}
                             />
-                            <label for="enhance">Улучшить качество текста</label
+                            <label for={file.enhanceElement}
+                                >Улучшить качество текста</label
                             >
                         </div>
                     {/if}
                 </div>
-                <div
-                    class="handle row tertiary-container"
-                    onmousedown={(e) => (file.clickTarget = e.target)}
-                    bind:this={file.handleElement}
-                >
+                <div use:dragHandle class="handle row tertiary-container">
                     ≡
                 </div>
             </div>
         {/each}
-    </div>
+    </section>
     <input
         type="button"
         class="add-button tertiary"
@@ -162,7 +131,8 @@
             i.type = "file";
             i.accept = "image/jpeg,application/pdf";
             i.addEventListener("change", (e: any) => {
-                files.push({
+                items.push({
+                    id: items.length,
                     file: e.target.files[0],
                     enhance: true,
                 });
@@ -170,7 +140,7 @@
             i.click();
         }}
     />
-    {#if files.length !== 0}
+    {#if items.length !== 0}
         {#if !processing}
             <input
                 class="submit-button primary-container"
@@ -206,11 +176,11 @@
         position: absolute;
         right: 16px;
         bottom: 16px;
-        width: 92px;
-        height: 92px;
+        width: 80px;
+        height: 80px;
         border-style: none;
-        border-radius: 24px;
-        font-size: 48px;
+        border-radius: 20px;
+        font-size: 28px;
         cursor: pointer;
     }
 
@@ -252,13 +222,11 @@
         min-width: 72px;
         min-height: 100%;
         text-align: center;
-        cursor: pointer;
         font-size: 24px;
         align-items: center;
         justify-content: center;
         margin-left: 12px;
         border-radius: 12px;
-        user-select: none;
     }
 
     .filter-select {
