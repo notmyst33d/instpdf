@@ -252,6 +252,7 @@
         border-style: none;
         padding: 12px;
         margin-top: 8px;
+        box-sizing: border-box;
         appearance: textfield;
         transition:
             outline-width 0.1s,
