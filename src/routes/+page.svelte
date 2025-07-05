@@ -27,7 +27,6 @@
             documents.push({
                 type: file.file.type,
                 field: `file${i}`,
-                enhance: file.enhance,
                 filter,
             });
         });
@@ -103,17 +102,6 @@
                             placeholder="Номер страницы"
                             bind:value={file.filterSinglePage}
                         />
-                    {:else if file.file.type === "image/jpeg"}
-                        <div>
-                            <input
-                                type="checkbox"
-                                bind:this={file.enhanceElement}
-                                bind:checked={file.enhance}
-                            />
-                            <label for={file.enhanceElement}
-                                >Улучшить качество текста</label
-                            >
-                        </div>
                     {/if}
                 </div>
                 <div use:dragHandle class="handle row tertiary-container">
@@ -134,7 +122,6 @@
                 items.push({
                     id: items.length,
                     file: e.target.files[0],
-                    enhance: true,
                 });
             });
             i.click();

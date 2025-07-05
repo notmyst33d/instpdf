@@ -34,11 +34,7 @@ export async function POST({ request }) {
             const filePath = join(tempdir, `${uuid}.jpg`);
             const filePathOutput = join(tempdir, `${uuid}.pdf`);
             await writeFile(filePath, Buffer.from(await file.arrayBuffer()));
-            let args = [filePath, "-resize", "2480x3508!", "-page", "A4"];
-            if (document.enhance) {
-                args = [...args, "-brightness-contrast", "25%x0%", "-channel", "RGB", "-threshold", "90%"];
-            }
-            const process = spawn("magick", [...args, filePathOutput]);
+            const process = spawn("magick", [filePath, "-resize", "2480x3508!", "-page", "A4", filePathOutput]);
             await once(process, "close");
         } else if (document.type === "application/pdf") {
             const filePath = join(tempdir, `${uuid}.pdf`);
