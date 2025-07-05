@@ -173,7 +173,7 @@
     }
 
     .add-button {
-        position: absolute;
+        position: fixed;
         right: 16px;
         bottom: 16px;
         width: 80px;
