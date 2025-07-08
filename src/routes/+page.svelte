@@ -1,10 +1,14 @@
 <script lang="ts">
+    import { tick } from "svelte";
     import { dragHandle, dragHandleZone } from "svelte-dnd-action";
+    import { flip } from "svelte/animate";
     let items: any = $state([]);
     let processing = $state(false);
-</script>
 
-<h1>InstPDF</h1>
+    function randomId(): number {
+        return parseInt((Math.random() + 1).toString().replace(".", ""));
+    }
+</script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <form
@@ -50,26 +54,29 @@
     }}
 >
     <section
-        use:dragHandleZone={{ items }}
+        use:dragHandleZone={{ items, flipDurationMs: 100, dropTargetStyle: {} }}
         onconsider={(e) => (items = e.detail.items)}
         onfinalize={(e) => (items = e.detail.items)}
     >
         {#each items as file (file.id)}
-            <div class="file-entry row">
-                <div class="file-entry-body column surface-container">
-                    <div
-                        class="row"
-                        style:align-items="center"
-                        style:height="100%"
-                    >
+            <div
+                class="file-entry row elevation"
+                style:border-radius="12px"
+                animate:flip={{ duration: 100 }}
+            >
+                <div class="file-entry-body surface-container">
+                    <div class="row" style:align-items="center">
                         <span
                             style:font-weight="700"
                             style:overflow="hidden"
                             style:text-overflow="ellipsis"
+                            style:flex-grow="1"
+                            style:flex-shrink="1"
                             style:white-space="nowrap">{file.file.name}</span
                         >
                         {#if file.file.type === "application/pdf"}
                             <select
+                                style:flex-shrink="2"
                                 class="filter-select primary-container"
                                 bind:value={file.filterType}
                             >
@@ -112,7 +119,7 @@
     </section>
     <input
         type="button"
-        class="add-button tertiary"
+        class="add-button tertiary elevation"
         value="+"
         onclick={() => {
             let i = document.createElement("input");
@@ -120,8 +127,11 @@
             i.accept = "image/jpeg,application/pdf";
             i.addEventListener("change", (e: any) => {
                 items.push({
-                    id: items.length,
+                    id: randomId(),
                     file: e.target.files[0],
+                });
+                tick().then(() => {
+                    window.scrollTo(0, document.body.scrollHeight);
                 });
             });
             i.click();
@@ -130,7 +140,7 @@
     {#if items.length !== 0}
         {#if !processing}
             <input
-                class="submit-button primary-container"
+                class="submit-button primary-container elevation"
                 type="submit"
                 value="Сделать PDF"
             />
@@ -144,11 +154,36 @@
             </div>
         {/if}
     {:else}
-        Добавьте файлы
+        <div class="upload-hint column">
+            <svg
+                class="upload-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                height="24px"
+                viewBox="0 -960 960 960"
+                width="24px"
+                fill="#ffffff"
+                ><path
+                    d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"
+                /></svg
+            >
+            <span class="upload-hint-text">Добавьте файлы</span>
+        </div>
     {/if}
 </form>
 
 <style>
+    @media screen and (width > 640px) {
+        form {
+            max-width: 640px;
+            margin: auto;
+        }
+
+        .add-button {
+            left: 50%;
+            transform: translateX(-50%);
+        }
+    }
+
     .column {
         display: flex;
         flex-direction: column;
@@ -181,7 +216,7 @@
 
     .file-entry-body {
         flex-grow: 1;
-        border-radius: 12px;
+        border-radius: 12px 0px 0px 12px;
         padding: 12px;
         overflow: hidden;
     }
@@ -212,11 +247,12 @@
         font-size: 24px;
         align-items: center;
         justify-content: center;
-        margin-left: 12px;
-        border-radius: 12px;
+        border-radius: 0px 12px 12px 0px;
     }
 
     .filter-select {
+        min-width: 96px;
+        max-width: 192px;
         border-color: transparent;
         border-style: solid;
         border-width: 8px;
@@ -225,6 +261,7 @@
         margin-left: 12px;
         overflow: hidden;
         font-weight: 500;
+        flex-shrink: 0;
     }
 
     .page-input {
@@ -262,6 +299,7 @@
         padding: 12px;
         border-radius: 32px;
         margin-top: 12px;
+        margin-bottom: 112px;
         cursor: pointer;
     }
 
@@ -280,6 +318,29 @@
 
     .icon-button:hover {
         background-color: #3a383e;
+    }
+
+    .upload-hint {
+        position: absolute;
+        top: 50%;
+        right: 50%;
+        transform: translateX(50%) translateY(-50%);
+        align-items: center;
+        z-index: -1;
+    }
+
+    .upload-hint-text {
+        font-size: 24px;
+        font-weight: 500;
+    }
+
+    .upload-icon {
+        width: 64px;
+        height: 64px;
+    }
+
+    .elevation {
+        box-shadow: 0px 4px 8px #00000052;
     }
 
     .loader {
