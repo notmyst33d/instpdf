@@ -1,0 +1,8 @@
+services:
+  instpdf:
+    build: .
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      - PORT=${PORT}
+    restart: always
