@@ -1,10 +1,16 @@
-FROM oven/bun:canary-alpine
+FROM oven/bun:alpine AS builder
 
 WORKDIR /app
 COPY . .
 
-RUN apk update && apk add imagemagick ghostscript
-RUN bun --bun install
-RUN bun --bun run build
+RUN bun install
+RUN bun run build
 
-CMD ["bun", "./build/index.js"]
+FROM oven/bun:alpine
+
+WORKDIR /app
+COPY --from=builder /app/build .
+
+RUN apk update && apk add imagemagick ghostscript
+
+CMD ["bun", "index.js"]
