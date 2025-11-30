@@ -1,4 +1,4 @@
-FROM oven/bun:alpine AS builder
+FROM docker.io/oven/bun:alpine AS builder
 
 WORKDIR /app
 COPY . .
@@ -6,7 +6,7 @@ COPY . .
 RUN bun install
 RUN bun run build
 
-FROM oven/bun:alpine
+FROM docker.io/oven/bun:alpine
 
 WORKDIR /app
 COPY --from=builder /app/build .

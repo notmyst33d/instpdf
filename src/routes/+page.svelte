@@ -1,43 +1,56 @@
 <script lang="ts">
+    import { encode } from "@msgpack/msgpack";
     import { tick } from "svelte";
     import { dragHandle, dragHandleZone } from "svelte-dnd-action";
     import { flip } from "svelte/animate";
-    let items: any = $state([]);
-    let processing = $state(false);
+    import { Document, DocumentFilter, DocumentMime } from "../common";
 
-    function randomId(): number {
-        return parseInt((Math.random() + 1).toString().replace(".", ""));
+    interface DocumentBinding {
+        id: number;
+        file: File;
+        fileUrl: string;
+        filter: DocumentFilter;
+        filterPage?: number;
+        imageZoom: boolean;
     }
+
+    let documentBindings: DocumentBinding[] = $state([]);
+    let processing = $state(false);
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
+<svelte:head>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+        rel="preconnect"
+        href="https://fonts.gstatic.com"
+        crossorigin="anonymous"
+    />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
+        rel="stylesheet"
+    />
+</svelte:head>
+
 <form
     onsubmit={async () => {
         processing = true;
-        const form = new FormData();
-        const documents: any[] = [];
-        items.forEach((file: any, i: number) => {
-            form.append(`file${i}`, file.file);
-            let filter: any = {
-                type: "nofilter",
-            };
-            if (file.filterType === "single") {
-                filter.type = "single";
-                filter.page = file.filterSinglePage;
-            } else if (file.filterType === "frompage") {
-                filter.type = "frompage";
-                filter.page = file.filterFromPage;
-            }
+        const documents: Document[] = [];
+        for (const binding of documentBindings) {
             documents.push({
-                type: file.file.type,
-                field: `file${i}`,
-                filter,
+                mime: binding.file.type as DocumentMime,
+                data: await binding.file.bytes(),
+                filter: {
+                    type: binding.filter,
+                    page: binding.filterPage,
+                },
             });
-        });
-        form.append("documents", JSON.stringify(documents));
-        const response = await fetch("/api/v1/submit", {
+        }
+        const response = await fetch("/api", {
             method: "POST",
-            body: form,
+            body: encode(documents) as any,
+            headers: {
+                "Content-Type": "application/vnd.msgpack",
+            },
         });
         if (response.status === 200) {
             const url = URL.createObjectURL(await response.blob());
@@ -47,88 +60,128 @@
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        } else if (response.status === 400) {
+            const errorId = await response.text();
+            if (errorId === "FILTER_PAGE_EMPTY") {
+                alert("Фильтр не имеет номера страницы");
+            } else {
+                alert("Внутренняя ошибка сервера");
+            }
         } else {
-            alert("Неизвестная ошибка");
+            alert("Внутренняя ошибка сервера");
         }
         processing = false;
     }}
 >
     <section
-        use:dragHandleZone={{ items, flipDurationMs: 100, dropTargetStyle: {} }}
-        onconsider={(e) => (items = e.detail.items)}
-        onfinalize={(e) => (items = e.detail.items)}
+        use:dragHandleZone={{
+            items: documentBindings,
+            flipDurationMs: 100,
+            dropTargetStyle: {},
+        }}
+        onconsider={(e) => (documentBindings = e.detail.items)}
+        onfinalize={(e) => (documentBindings = e.detail.items)}
     >
-        {#each items as file (file.id)}
-            <div
-                class="file-entry row elevation"
-                style:border-radius="12px"
-                animate:flip={{ duration: 100 }}
-            >
-                <div class="file-entry-body surface-container">
+        {#each documentBindings as binding, i (binding.id)}
+            <div class="file-entry row" animate:flip={{ duration: 100 }}>
+                <div class="file-entry-body">
                     <div class="row" style:align-items="center">
                         <span
                             style:font-weight="700"
                             style:overflow="hidden"
                             style:text-overflow="ellipsis"
-                            style:flex-grow="1"
                             style:flex-shrink="1"
-                            style:white-space="nowrap">{file.file.name}</span
+                            style:white-space="nowrap"
                         >
-                        {#if file.file.type === "application/pdf"}
+                            {binding.file.name}
+                        </span>
+                        {#if binding.file.type === "application/pdf"}
                             <select
                                 style:flex-shrink="2"
-                                class="filter-select primary-container"
-                                bind:value={file.filterType}
+                                bind:value={binding.filter}
                             >
-                                <option value="nofilter">Без фильтра</option>
-                                <option value="frompage">Со страницы</option>
+                                <option value="none">Без фильтра</option>
+                                <option value="from">Со страницы</option>
                                 <option value="single">Одна страница</option>
                             </select>
+                        {:else if (binding.file.type === "image/jpeg" || binding.file.type === "image/png") && !binding.imageZoom}
+                            <button
+                                type="button"
+                                class="image-button"
+                                style:margin-left="var(--spacing)"
+                                onclick={() =>
+                                    (binding.imageZoom = !binding.imageZoom)}
+                            >
+                                <img
+                                    style:max-width="64px"
+                                    style:max-height="64px"
+                                    src={binding.fileUrl}
+                                    alt="Input"
+                                />
+                            </button>
                         {/if}
+                        <span style:flex-grow="1"></span>
                         <input
                             type="button"
                             class="icon-button"
                             value="⨉"
-                            onclick={() =>
-                                (items = items.filter((f: any) => file !== f))}
+                            onclick={() => documentBindings.splice(i, 1)}
                         />
                     </div>
-                    {#if file.filterType === "frompage"}
+                    {#if binding.imageZoom}
+                        <button
+                            type="button"
+                            class="image-button"
+                            onclick={() =>
+                                (binding.imageZoom = !binding.imageZoom)}
+                        >
+                            <img
+                                style:width="100%"
+                                src={binding.fileUrl}
+                                alt="Input"
+                            />
+                        </button>
+                    {/if}
+                    {#if binding.filter === "from"}
                         <input
-                            class="page-input"
                             type="number"
                             min="1"
                             placeholder="Начальная страница"
-                            bind:value={file.filterFromPage}
+                            bind:value={binding.filterPage}
                         />
-                    {:else if file.filterType === "single"}
+                    {:else if binding.filter === "single"}
                         <input
-                            class="page-input"
                             type="number"
                             min="1"
                             placeholder="Номер страницы"
-                            bind:value={file.filterSinglePage}
+                            bind:value={binding.filterPage}
                         />
                     {/if}
                 </div>
-                <div use:dragHandle class="handle row tertiary-container">
-                    ≡
-                </div>
+                <div use:dragHandle class="handle row">≡</div>
             </div>
         {/each}
     </section>
     <input
         type="button"
-        class="add-button tertiary elevation"
+        class="add-button"
         value="+"
         onclick={() => {
             let i = document.createElement("input");
             i.type = "file";
-            i.accept = "image/jpeg,application/pdf";
-            i.addEventListener("change", (e: any) => {
-                items.push({
-                    id: randomId(),
-                    file: e.target.files[0],
+            i.accept = "image/jpeg,image/png,application/pdf";
+            i.addEventListener("change", (e) => {
+                let id = 0;
+                if (documentBindings.length > 0) {
+                    id = Math.max(...documentBindings.map((d) => d.id)) + 1;
+                }
+                const file = (e.target as HTMLInputElement).files![0];
+                documentBindings.push({
+                    id,
+                    fileUrl: URL.createObjectURL(file),
+                    file,
+                    filter: "none",
+                    imageZoom: false,
                 });
                 tick().then(() => {
                     window.scrollTo(0, document.body.scrollHeight);
@@ -137,13 +190,9 @@
             i.click();
         }}
     />
-    {#if items.length !== 0}
+    {#if documentBindings.length !== 0}
         {#if !processing}
-            <input
-                class="submit-button primary-container elevation"
-                type="submit"
-                value="Сделать PDF"
-            />
+            <input class="submit-button" type="submit" value="Сделать PDF" />
         {:else}
             <div
                 class="row"
@@ -172,6 +221,30 @@
 </form>
 
 <style>
+    :root {
+        --surface: #141318;
+        --on-surface: #e6e1e9;
+        --surface-container: #211f24;
+        --tertiary: #492533;
+        --on-tertiary: #efb8c9;
+        --tertiary-container: #ffd9e3;
+        --on-tertiary-container: #633b49;
+        --primary-container: #4c3e76;
+        --on-primary-container: #e8ddff;
+        --elevation: 0px 4px 8px #00000052;
+        --spacing: 12px;
+        --corners: 12px;
+    }
+
+    :global(body) {
+        color: var(--on-surface);
+        background-color: var(--surface);
+    }
+
+    :global(*) {
+        font-family: "Roboto";
+    }
+
     @media screen and (width > 640px) {
         form {
             max-width: 640px;
@@ -184,87 +257,35 @@
         }
     }
 
-    .column {
-        display: flex;
-        flex-direction: column;
+    img {
+        display: block;
+        width: 100%;
     }
 
-    .row {
-        display: flex;
-        flex-direction: row;
-    }
-
-    .add-button {
-        position: fixed;
-        right: 16px;
-        bottom: 16px;
-        width: 80px;
-        height: 80px;
+    button,
+    input[type="button"],
+    input[type="submit"] {
         border-style: none;
-        border-radius: 20px;
-        font-size: 28px;
         cursor: pointer;
     }
 
-    .file-entry + .file-entry {
-        margin-top: 12px;
-    }
-
-    .file-entry {
-        min-height: 72px;
-    }
-
-    .file-entry-body {
-        flex-grow: 1;
-        border-radius: 12px 0px 0px 12px;
-        padding: 12px;
-        overflow: hidden;
-    }
-
-    .tertiary {
-        color: #492533;
-        background-color: #efb8c9;
-    }
-
-    .surface-container {
-        background-color: #211f24;
-    }
-
-    .tertiary-container {
-        color: #ffd9e3;
-        background-color: #633b49;
-    }
-
-    .primary-container {
-        color: #e8ddff;
-        background-color: #4c3e76;
-    }
-
-    .handle {
-        min-width: 72px;
-        min-height: 100%;
-        text-align: center;
-        font-size: 24px;
-        align-items: center;
-        justify-content: center;
-        border-radius: 0px 12px 12px 0px;
-    }
-
-    .filter-select {
+    select {
         min-width: 96px;
         max-width: 192px;
         border-color: transparent;
         border-style: solid;
         border-width: 8px;
-        border-radius: 32px;
+        border-radius: 64px;
         padding: 8px;
         margin-left: 12px;
         overflow: hidden;
         font-weight: 500;
         flex-shrink: 0;
+        color: var(--on-primary-container);
+        background-color: var(--primary-container);
     }
 
-    .page-input {
+    input[type="number"] {
         width: 100%;
         max-width: 256px;
         background-color: transparent;
@@ -283,35 +304,95 @@
             outline-color 0.1s;
     }
 
-    .page-input:hover {
+    input[type="number"]:hover {
         outline-color: #e5e1e9;
     }
 
-    .page-input:focus {
+    input[type="number"]:focus {
         outline-color: #c9bfff;
         outline-width: 2px;
     }
 
+    .image-button {
+        padding: 0px;
+        margin: 0px;
+        flex-shrink: 1;
+    }
+
+    .column {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .row {
+        display: flex;
+        flex-direction: row;
+    }
+
+    .add-button {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        width: 80px;
+        height: 80px;
+        border-radius: var(--corners);
+        font-size: 28px;
+        box-shadow: var(--elevation);
+        background-color: var(--tertiary-container);
+        color: var(--on-tertiary-container);
+    }
+
+    .file-entry {
+        border-radius: var(--corners);
+        box-shadow: var(--elevation);
+    }
+
+    .file-entry + .file-entry {
+        margin-top: var(--spacing);
+    }
+
+    .file-entry-body {
+        flex-grow: 1;
+        border-radius: var(--corners) 0px 0px var(--corners);
+        padding: var(--spacing) var(--spacing) var(--spacing)
+            calc(var(--spacing) + 12px);
+        overflow: hidden;
+        color: var(--on-surface);
+        background-color: var(--surface-container);
+    }
+
+    .handle {
+        min-width: 72px;
+        min-height: 100%;
+        text-align: center;
+        font-size: 24px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0px var(--corners) var(--corners) 0px;
+        color: var(--on-tertiary-container);
+        background-color: var(--tertiary-container);
+    }
+
     .submit-button {
         width: 100%;
-        border: none;
         font-weight: 500;
-        padding: 12px;
-        border-radius: 32px;
-        margin-top: 12px;
-        margin-bottom: 112px;
-        cursor: pointer;
+        min-height: 48px;
+        border-radius: 64px;
+        padding: var(--spacing);
+        margin-top: var(--spacing);
+        margin-bottom: 96px;
+        background-color: var(--primary-container);
+        color: var(--on-primary-container);
+        box-shadow: var(--elevation);
     }
 
     .icon-button {
-        border: none;
         min-width: 48px;
         min-height: 48px;
         border-radius: 64px;
         background-color: transparent;
         font-weight: 700;
         color: #e5e1e9;
-        cursor: pointer;
         margin-left: 8px;
         transition: background-color 0.1s;
     }
@@ -332,15 +413,12 @@
     .upload-hint-text {
         font-size: 24px;
         font-weight: 500;
+        text-align: center;
     }
 
     .upload-icon {
         width: 64px;
         height: 64px;
-    }
-
-    .elevation {
-        box-shadow: 0px 4px 8px #00000052;
     }
 
     .loader {
