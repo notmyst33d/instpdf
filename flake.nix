@@ -10,7 +10,7 @@
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            nodejs-slim_24
+            nodejs_24
             ghostscript
             imagemagick
           ];
