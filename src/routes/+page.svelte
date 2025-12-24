@@ -7,7 +7,9 @@
 
     interface DocumentBinding {
         id: number;
-        file: File;
+        fileData: Uint8Array<ArrayBuffer>;
+        fileType: DocumentMime;
+        fileName: string;
         fileUrl: string;
         filter: DocumentFilter;
         filterPage?: number;
@@ -26,53 +28,12 @@
         crossorigin="anonymous"
     />
     <link
-        href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&display=swap"
         rel="stylesheet"
     />
 </svelte:head>
 
-<form
-    onsubmit={async () => {
-        processing = true;
-        const documents: Document[] = [];
-        for (const binding of documentBindings) {
-            documents.push({
-                mime: binding.file.type as DocumentMime,
-                data: await binding.file.bytes(),
-                filter: {
-                    type: binding.filter,
-                    page: binding.filterPage,
-                },
-            });
-        }
-        const response = await fetch("/api", {
-            method: "POST",
-            body: encode(documents) as any,
-            headers: {
-                "Content-Type": "application/vnd.msgpack",
-            },
-        });
-        if (response.status === 200) {
-            const url = URL.createObjectURL(await response.blob());
-            const link = document.createElement("a");
-            link.href = url;
-            link.setAttribute("download", "out.pdf");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        } else if (response.status === 400) {
-            const errorId = await response.text();
-            if (errorId === "FILTER_PAGE_EMPTY") {
-                alert("Фильтр не имеет номера страницы");
-            } else {
-                alert("Внутренняя ошибка сервера");
-            }
-        } else {
-            alert("Внутренняя ошибка сервера");
-        }
-        processing = false;
-    }}
->
+<main>
     <section
         use:dragHandleZone={{
             items: documentBindings,
@@ -93,9 +54,9 @@
                             style:flex-shrink="1"
                             style:white-space="nowrap"
                         >
-                            {binding.file.name}
+                            {binding.fileName}
                         </span>
-                        {#if binding.file.type === "application/pdf"}
+                        {#if binding.fileType === "application/pdf"}
                             <select
                                 style:flex-shrink="2"
                                 bind:value={binding.filter}
@@ -104,7 +65,7 @@
                                 <option value="from">Со страницы</option>
                                 <option value="single">Одна страница</option>
                             </select>
-                        {:else if (binding.file.type === "image/jpeg" || binding.file.type === "image/png") && !binding.imageZoom}
+                        {:else if (binding.fileType === "image/jpeg" || binding.fileType === "image/png") && !binding.imageZoom}
                             <button
                                 type="button"
                                 class="image-button"
@@ -176,23 +137,73 @@
                     id = Math.max(...documentBindings.map((d) => d.id)) + 1;
                 }
                 const file = (e.target as HTMLInputElement).files![0];
-                documentBindings.push({
-                    id,
-                    fileUrl: URL.createObjectURL(file),
-                    file,
-                    filter: "none",
-                    imageZoom: false,
-                });
-                tick().then(() => {
-                    window.scrollTo(0, document.body.scrollHeight);
-                });
+                const reader = new FileReader();
+                reader.readAsArrayBuffer(file);
+                reader.onload = () => {
+                    documentBindings.push({
+                        id,
+                        fileUrl: URL.createObjectURL(file),
+                        fileData: new Uint8Array(reader.result as ArrayBuffer),
+                        fileType: file.type as DocumentMime,
+                        fileName: file.name,
+                        filter: "none",
+                        imageZoom: false,
+                    });
+                    tick().then(() => {
+                        window.scrollTo(0, document.body.scrollHeight);
+                    });
+                };
             });
             i.click();
         }}
     />
     {#if documentBindings.length !== 0}
         {#if !processing}
-            <input class="submit-button" type="submit" value="Сделать PDF" />
+            <input
+                class="submit-button"
+                type="submit"
+                value="Сделать PDF"
+                onclick={async () => {
+                    processing = true;
+                    const documents: Document[] = [];
+                    for (const binding of documentBindings) {
+                        documents.push({
+                            mime: binding.fileType,
+                            data: binding.fileData,
+                            filter: {
+                                type: binding.filter,
+                                page: binding.filterPage,
+                            },
+                        });
+                    }
+                    const response = await fetch("/api", {
+                        method: "POST",
+                        body: encode(documents) as any,
+                        headers: {
+                            "Content-Type": "application/vnd.msgpack",
+                        },
+                    });
+                    if (response.status === 200) {
+                        const url = URL.createObjectURL(await response.blob());
+                        const link = document.createElement("a");
+                        link.href = url;
+                        link.setAttribute("download", "out.pdf");
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } else if (response.status === 400) {
+                        const errorId = await response.text();
+                        if (errorId === "FILTER_PAGE_EMPTY") {
+                            alert("Фильтр не имеет номера страницы");
+                        } else {
+                            alert("Внутренняя ошибка сервера");
+                        }
+                    } else {
+                        alert("Внутренняя ошибка сервера");
+                    }
+                    processing = false;
+                }}
+            />
         {:else}
             <div
                 class="row"
@@ -218,7 +229,7 @@
             <span class="upload-hint-text">Добавьте файлы</span>
         </div>
     {/if}
-</form>
+</main>
 
 <style>
     :root {
@@ -242,11 +253,11 @@
     }
 
     :global(*) {
-        font-family: "Roboto";
+        font-family: "Google Sans", sans-serif, system-ui;
     }
 
     @media screen and (width > 640px) {
-        form {
+        main {
             max-width: 640px;
             margin: auto;
         }
