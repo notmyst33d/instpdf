@@ -57,7 +57,12 @@ async function runProcess(path: string, args: string[], options?: RunOptions) {
 
 export async function POST({ request }) {
     const data = await request.blob();
-    const documents = Document.array().parse(await Array.fromAsync(decodeArrayStream(data.stream())));
+    const stream = decodeArrayStream(data.stream());
+    const rawDocuments = [];
+    for await (const value of stream) {
+        rawDocuments.push(value);
+    }
+    const documents = Document.array().parse(rawDocuments);
 
     const tempPool = new TemporaryFilePool();
     const concatInputs = [];
